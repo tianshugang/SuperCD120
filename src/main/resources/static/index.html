@@ -1,0 +1,242 @@
+<!DOCTYPE html>
+<html lang="en" ng-app="myApp">
+<head>
+    <meta charset="UTF-8">
+    <title>超级华医通</title>
+    <style>
+        table,table tr th, table tr td { border:1px solid #0094ff; }
+        table { width: 1000px; min-height: 100px; line-height: 25px; text-align: center; border-collapse: collapse;}
+    </style>
+    <script src="https://cdn.staticfile.org/angular.js/1.4.6/angular.min.js"></script>
+    <script>
+        var app = angular.module('myApp', []);
+        app.controller('myCtrl', function($scope,$http,$interval) {
+            $scope.search = function () {
+                $http({
+                        method: 'GET',
+                        url: '/doctor/list'
+                    })
+                    .then(function (value) {
+                        $scope.doctors = value.data.doctorsList;
+                        $scope.showInfo =
+                            $scope.cards!= undefined
+                            && $scope.cards.length > 0
+                            && $scope.doctors != undefined
+                            && $scope.doctors.length > 0;
+                    }, function (value) {
+                        alert("搜索失败")
+                    });
+
+                $http({
+                    method: 'GET',
+                    url: '/card/search'
+                }).then(function (value) {
+                        $scope.cards = value.data.data.userCardList;
+                        $scope.showInfo =
+                            $scope.cards!= undefined
+                            && $scope.cards.length > 0
+                            && $scope.doctors != undefined
+                            && $scope.doctors.length > 0;
+                    }, function (value) {
+                        alert("搜索失败")
+                    });
+                };
+
+            $scope.selectDoctor = function ($index) {
+                $scope.selectedDoctor = $scope.doctors[$index];
+            }
+
+            $scope.selectCard = function ($index) {
+                $scope.selectedCard = $scope.cards[$index];
+            };
+            $scope.getImageCode = function () {
+                $http({
+                    method: 'GET',
+                    url: '/imagecode'
+                }).then(function (value) {
+                        value.data.imageData = "data:image/jpeg;base64," + value.data.data.imageData;
+                        $scope.myImageCode = value.data;
+                    }, function (value) {
+                        alert("获取验证码失败")
+                    });
+            };
+
+            var count = 0;
+            function guahao(sysScheduleId){
+                count ++;
+                $http({
+                    method: 'POST',
+                    url: '/doctor/requestAppointmentNew',
+                    data:
+                        {
+                            "cardId":$scope.selectedCard.cardId,
+                            "verifyCode":$scope.imageCode,
+                            "imageId":$scope.myImageCode.data.bizSeq,
+                            "sysScheduleId":sysScheduleId
+                        }
+                }).then(function (value) {
+                    alert(value.data.msg);
+                }, function (value) {
+                    if(count < 3){
+                        guahao(sysScheduleId)
+                    }else{
+                        guahao(sysScheduleId)
+                    }
+                });
+            }
+
+            $scope.searchDoctor = function () {
+                $http({
+                    method: 'GET',
+                    url: '/doctor/search?keyWord='+$scope.doctorName,
+                }).then(function (value) {
+                    $scope.searchDoctorResult = JSON.stringify(removeOtherInfo(value.data.data));
+                }, function (value) {
+                    alert("查询医生信息失败");
+                });
+                
+                function removeOtherInfo(value) {
+                    var expect = {
+                        "doctorId": "1",
+                        "docName": "1",
+                        "deptName": "1",
+                        "deptCode": "1",
+                        "scheduleDeptName": "1",
+                        "docCode": "1"
+                    };
+                    if (value == null)return value;
+
+                    angular.forEach(value,function (item) {
+                        angular.forEach(item,function (value,key) {
+                            if(expect[key] != "1"){
+                                delete item[key];
+                            }
+                        })
+                    })
+                    return value;
+                }
+            };
+
+            //查排班
+            $scope.appointschedule = function(){
+                $scope.retryCount ++;
+                $http({
+                    method: 'POST',
+                    url: '/doctor/schedule',
+                    data:
+                        {
+                            "deptCode":$scope.selectedDoctor.deptCode,
+                            "doctorId":$scope.selectedDoctor.doctorId
+                        }
+                }).then(function (value) {
+                    if (value.data.code == '1' && value.data.data.sourceItemsRespVos.length > 0){
+                        for (var i=0;i<value.data.data.sourceItemsRespVos.length;i++){
+                            var item = value.data.data.sourceItemsRespVos[i];
+                            if(item.scheduleDate.split("-")[2] != $scope.expectdate){
+                                console.log("日期不符合预期跳到下一个"+item.scheduleDate);
+                                continue;
+                            }
+                            if (item.availableCount > 0){
+                                console.log("获取排班成功，还有["+item.availableCount+"]个号，开始挂号@"+item.scheduleDate);
+                                guahao(item.sysScheduleId);
+                                console.log(item.scheduleDate+"开始挂号");
+                                return
+                            }else{
+                                console.log(item.scheduleDate+"已满");
+                            }
+                        }
+                        console.log("重试获取排班");
+                        $scope.appointschedule();
+                    }else{
+                        $scope.appointschedule();
+                    }
+                }, function (value) {
+                    $scope.appointschedule();
+                });
+            }
+
+            $scope.retryCount = 0;
+            $scope.startGuahao = function () {
+                $scope.started = true;
+                $scope.countTime();
+            }
+            $scope.countTime = function () {
+                var nowtime = new Date();
+                var endtime = new Date();
+                endtime.setHours(17,35,0,0);
+                $scope.lefttime = parseInt((endtime.getTime() - nowtime.getTime()) / 1000);
+
+                $interval(function(){
+                    $scope.lefttime --;
+                },1000,$scope.lefttime);
+            }
+
+            $scope.$watch('lefttime',function(newtime,oldtime){
+                if(oldtime!=newtime && newtime == 0){
+                    $scope.appointschedule();
+                }
+            });
+            $scope.imageCode ="";
+        });
+    </script>
+</head>
+<body ng-controller="myCtrl">
+    <button ng-click="search()">显示信息</button></br>
+    <div ng-show="showInfo">
+        -------------------------------------------1.选择医生-------------------------------------------------------------------</br>
+        医生列表：
+        <table>
+            <tr><td>姓名</td><td>科室</td><td>亚专业</td><td></td></tr>
+            <tr ng-repeat="d in doctors">
+                <td>{{ d.docName }}</td>
+                <td>{{ d.scheduleDeptName }}</td>
+                <td>{{ d.deptName }}</td>
+                <td><button ng-click="selectDoctor($index)">选择</button></td>
+            </tr>
+        </table>
+        </br>
+        </br>
+        -------------------------------------------2.选择患者-------------------------------------------------------------------</br>
+        就诊卡列表：
+        <table>
+            <tr><td>姓名</td><td></td></tr>
+            <tr ng-repeat="c in cards">
+                <td>{{ c.patientName }}</td>
+                <td><button ng-click="selectCard($index)">选择</button></td>
+            </tr>
+        </table>
+        <div>
+            <h1>已选医生： {{selectedDoctor.deptName}}-{{selectedDoctor.docName}}</h1>
+            <h1>已选挂号人： {{selectedCard.patientName}}</h1>
+            </br>
+            </br>
+            -------------------------------------------3.输入期望日期-------------------------------------------------------------------</br>
+            挂号日期<input type="text" ng-model="expectdate"></input>
+        </div>
+        </br>
+        </br>
+        -------------------------------------------4.生成&填写验证码-------------------------------------------------------------------</br>
+        <button ng-click="getImageCode()">获取验证码</button>
+        <img ng-src="{{myImageCode.imageData}}" />
+        {{myImageCode.msg}}
+        <br>
+        <input type="text" ng-model="imageCode"></input></br>
+        </br>
+        </br>
+        -------------------------------------------5.开始挂号(默认8:00)-------------------------------------------------------------------</br>
+        <button ng-click="startGuahao()">倒计时挂号</button></br>
+        <div ng-show="started">
+            <h1>即将开始挂号.倒计时{{lefttime}}秒</h1>
+            <h1>正在第{{retryCount}}次挂号</h1>
+        </div></br>
+        <button ng-click="appointschedule()">立即挂号</button>
+    </div>
+    </br>
+    </br>
+-------------------------------------------华丽的分割线-------------------------------------------------------------------</br>
+    <input type="text" ng-model="doctorName"></input>
+    <button ng-click="searchDoctor()">搜索医生信息</button></br>
+    搜索结果：</br>
+    <textarea ng-model="searchDoctorResult" rows="10" cols="100"></textarea></br>
+</body>
+</html>

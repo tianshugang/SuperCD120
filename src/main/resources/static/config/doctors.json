@@ -1,0 +1,7 @@
+{
+  "doctorsList": [
+    {"doctorId":"4028b881646e3d8701646e3d87450128","docName":"刘阳","docCode":"1861","deptName":"心理卫生","deptCode":"288","scheduleDeptName":"心理卫生中心"},
+    {"doctorId":"4028b881646e3d8701646e3d87450128","docName":"刘阳","docCode":"1861","deptName":"心理咨询","deptCode":"289","scheduleDeptName":"心理卫生中心"},
+    {"doctorId":"1304366089626587136","docName":"刘雪梅","docCode":"20198335","deptName":"中西医结合呼吸","deptCode":"309","scheduleDeptName":"中西结合科"}
+  ]
+}
